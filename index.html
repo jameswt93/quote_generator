@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dock & Door Quote Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const pricingTiers = {
+            '1-10': {
+                doorOnly: 200,
+                doorPlate: 225,
+                doorPlateRestraint: 250,
+                sectionalDoors: 100,
+                rollingSteelDoor: 100,
+                highSpeedDoors: 166,
+                fireDoorBelow10: 200
+            },
+            '10-15': {
+                doorOnly: 150,
+                doorPlate: 190,
+                doorPlateRestraint: 200,
+                sectionalDoors: 100,
+                rollingSteelDoor: 100,
+                highSpeedDoors: 166,
+                fireDoorBelow10: 200
+            },
+            '16-49': {
+                doorOnly: 90,
+                doorPlate: 120,
+                doorPlateRestraint: 150,
+                sectionalDoors: 100,
+                rollingSteelDoor: 100,
+                highSpeedDoors: 166,
+                fireDoorBelow10: 200
+            },
+            '49-99': {
+                doorOnly: 70,
+                doorPlate: 75,
+                doorPlateRestraint: 90,
+                sectionalDoors: 100,
+                rollingSteelDoor: 100,
+                highSpeedDoors: 166,
+                fireDoorBelow10: 200
+            },
+            '99+': {
+                doorOnly: 55,
+                doorPlate: 65,
+                doorPlateRestraint: 75,
+                sectionalDoors: 100,
+                rollingSteelDoor: 100,
+                highSpeedDoors: 166,
+                fireDoorBelow10: 200
+            }
+        };
+
+        function getTier(total) {
+            if (total >= 99) return '99+';
+            if (total >= 49) return '49-99';
+            if (total >= 16) return '16-49';
+            if (total >= 10) return '10-15';
+            return '1-10';
+        }
+
+        function App() {
+            const [formData, setFormData] = React.useState({
+                totalPositions: 0,
+                doorOnly: 0,
+                doorPlate: 0,
+                doorPlateRestraint: 0,
+                hasSpecialtyDoors: false,
+                sectionalDoors: 0,
+                rollingSteelDoors: 0,
+                highSpeedDoors: 0,
+                fireDoorBelow10: 0,
+                serviceFrequency: 'quarterly'
+            });
+            const [quote, setQuote] = React.useState(null);
+            const [error, setError] = React.useState('');
+
+            React.useEffect(() => {
+                if (!formData.hasSpecialtyDoors) {
+                    setFormData(prev => ({
+                        ...prev,
+                        sectionalDoors: 0,
+                        rollingSteelDoors: 0,
+                        highSpeedDoors: 0,
+                        fireDoorBelow10: 0
+                    }));
+                }
+            }, [formData.hasSpecialtyDoors]);
+
+            const handleNumberChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: parseInt(value) || 0 }));
+            };
+
+            const handleCheckboxChange = (e) => {
+                setFormData(prev => ({ ...prev, hasSpecialtyDoors: e.target.checked }));
+            };
+
+            const handleRadioChange = (e) => {
+                setFormData(prev => ({ ...prev, serviceFrequency: e.target.value }));
+            };
+
+            const calculateQuote = () => {
+                const { totalPositions, doorOnly, doorPlate, doorPlateRestraint, hasSpecialtyDoors, sectionalDoors, rollingSteelDoors, highSpeedDoors, fireDoorBelow10, serviceFrequency } = formData;
+                const standardSum = doorOnly + doorPlate + doorPlateRestraint;
+                const specialtySum = hasSpecialtyDoors ? (sectionalDoors + rollingSteelDoors + highSpeedDoors + fireDoorBelow10) : 0;
+                const totalSum = standardSum + specialtySum;
+                if (totalSum !== totalPositions) {
+                    setError('The sum of all door types must equal Total Positions.');
+                    setQuote(null);
+                    return;
+                }
+                if (totalPositions < 1) {
+                    setError('Total Positions must be at least 1.');
+                    setQuote(null);
+                    return;
+                }
+                setError('');
+                const tier = getTier(totalPositions);
+                const rates = pricingTiers[tier];
+                const costDoorOnly = doorOnly * rates.doorOnly;
+                const costDoorPlate = doorPlate * rates.doorPlate;
+                const costDoorPlateRestraint = doorPlateRestraint * rates.doorPlateRestraint;
+                const costSectionalDoors = hasSpecialtyDoors ? sectionalDoors * rates.sectionalDoors : 0;
+                const costRollingSteelDoors = hasSpecialtyDoors ? rollingSteelDoors * rates.rollingSteelDoor : 0;
+                const costHighSpeedDoors = hasSpecialtyDoors ? highSpeedDoors * rates.highSpeedDoors : 0;
+                const costFireDoorBelow10 = hasSpecialtyDoors ? fireDoorBelow10 * rates.fireDoorBelow10 : 0;
+                const scissorLiftCost = totalPositions < 35 ? 750 : 1700;
+                const subtotal = costDoorOnly + costDoorPlate + costDoorPlateRestraint + costSectionalDoors + costRollingSteelDoors + costHighSpeedDoors + costFireDoorBelow10 + scissorLiftCost;
+                const totalCost = serviceFrequency === 'semi-annual' ? subtotal * 1.12 : subtotal;
+                const breakdown = [
+                    { name: 'Door Only', quantity: doorOnly, unitPrice: rates.doorOnly, total: costDoorOnly },
+                    { name: 'Door & Plate', quantity: doorPlate, unitPrice: rates.doorPlate, total: costDoorPlate },
+                    { name: 'Door Plate & Restraint', quantity: doorPlateRestraint, unitPrice: rates.doorPlateRestraint, total: costDoorPlateRestraint },
+                    { name: 'Scissor Lift', quantity: 1, unitPrice: scissorLiftCost, total: scissorLiftCost }
+                ];
+                if (hasSpecialtyDoors) {
+                    breakdown.push(
+                        { name: 'Sectional Doors', quantity: sectionalDoors, unitPrice: rates.sectionalDoors, total: costSectionalDoors },
+                        { name: 'Rolling Steel Doors', quantity: rollingSteelDoors, unitPrice: rates.rollingSteelDoor, total: costRollingSteelDoors },
+                        { name: 'High Speed Doors', quantity: highSpeedDoors, unitPrice: rates.highSpeedDoors, total: costHighSpeedDoors },
+                        { name: 'Fire Door Below 10\'', quantity: fireDoorBelow10, unitPrice: rates.fireDoorBelow10, total: costFireDoorBelow10 }
+                    );
+                }
+                const filteredBreakdown = breakdown.filter(item => item.total > 0);
+                setQuote({ breakdown: filteredBreakdown, totalCost, serviceFrequency });
+            };
+
+            const generatePDF = () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                doc.setFontSize(18);
+                doc.text('Dock & Door Service Quote', 20, 20);
+                doc.setFontSize(12);
+                let yOffset = 40;
+                doc.text(`Total Positions: ${formData.totalPositions}`, 20, yOffset);
+                yOffset += 10;
+                doc.text(`Service Frequency: ${quote.serviceFrequency}`, 20, yOffset);
+                yOffset += 20;
+                doc.text('Cost Breakdown', 20, yOffset);
+                yOffset += 10;
+                quote.breakdown.forEach(item => {
+                    doc.text(`${item.name}: $${item.total.toFixed(2)}`, 20, yOffset);
+                    yOffset += 10;
+                });
+                yOffset += 10;
+                doc.text(`Total Cost: $${quote.totalCost.toFixed(2)}`, 20, yOffset);
+                doc.save('quote.pdf');
+            };
+
+            return (
+                <div className="flex justify-center items-center min-h-screen bg-gray-100">
+                    <div className="max-w-2xl w-full bg-white p-8 rounded-lg shadow-lg max-h-[90vh] overflow-y-auto">
+                        <h1 className="text-2xl font-bold mb-4 text-center">Dock & Door Quote Tool</h1>
+                        {error && <div className="text-red-500 mb-4 text-center">{error}</div>}
+                        <div className="space-y-4">
+                            <label className="block">
+                                Total Positions:
+                                <input
+                                    type="number"
+                                    name="totalPositions"
+                                    value={formData.totalPositions}
+                                    onChange={handleNumberChange}
+                                    min="0"
+                                    className="ml-2 p-1 border rounded w-24"
+                                />
+                            </label>
+                            <label className="block">
+                                Door Only:
+                                <input
+                                    type="number"
+                                    name="doorOnly"
+                                    value={formData.doorOnly}
+                                    onChange={handleNumberChange}
+                                    min="0"
+                                    className="ml-2 p-1 border rounded w-24"
+                                />
+                            </label>
+                            <label className="block">
+                                Door & Plate:
+                                <input
+                                    type="number"
+                                    name="doorPlate"
+                                    value={formData.doorPlate}
+                                    onChange={handleNumberChange}
+                                    min="0"
+                                    className="ml-2 p-1 border rounded w-24"
+                                />
+                            </label>
+                            <label className="block">
+                                Door Plate & Restraint:
+                                <input
+                                    type="number"
+                                    name="doorPlateRestraint"
+                                    value={formData.doorPlateRestraint}
+                                    onChange={handleNumberChange}
+                                    min="0"
+                                    className="ml-2 p-1 border rounded w-24"
+                                />
+                            </label>
+                            <div>
+                                <input
+                                    type="checkbox"
+                                    checked={formData.hasSpecialtyDoors}
+                                    onChange={handleCheckboxChange}
+                                    className="mr-2"
+                                />
+                                <label>Specialty or Interior Doors</label>
+                            </div>
+                            {formData.hasSpecialtyDoors && (
+                                <div className="ml-4 space-y-2">
+                                    <h3 className="text-lg font-medium">Specialty Doors</h3>
+                                    <label className="block">
+                                        Sectional Doors:
+                                        <input
+                                            type="number"
+                                            name="sectionalDoors"
+                                            value={formData.sectionalDoors}
+                                            onChange={handleNumberChange}
+                                            min="0"
+                                            className="ml-2 p-1 border rounded w-24"
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        Rolling Steel Doors:
+                                        <input
+                                            type="number"
+                                            name="rollingSteelDoors"
+                                            value={formData.rollingSteelDoors}
+                                            onChange={handleNumberChange}
+                                            min="0"
+                                            className="ml-2 p-1 border rounded w-24"
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        High Speed Doors:
+                                        <input
+                                            type="number"
+                                            name="highSpeedDoors"
+                                            value={formData.highSpeedDoors}
+                                            onChange={handleNumberChange}
+                                            min="0"
+                                            className="ml-2 p-1 border rounded w-24"
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        Fire Door Below 10':
+                                        <input
+                                            type="number"
+                                            name="fireDoorBelow10"
+                                            value={formData.fireDoorBelow10}
+                                            onChange={handleNumberChange}
+                                            min="0"
+                                            className="ml-2 p-1 border rounded w-24"
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                            <div className="space-y-2">
+                                <label className="block">Service Frequency:</label>
+                                <div>
+                                    <input
+                                        type="radio"
+                                        id="quarterly"
+                                        name="serviceFrequency"
+                                        value="quarterly"
+                                        checked={formData.serviceFrequency === 'quarterly'}
+                                        onChange={handleRadioChange}
+                                        className="mr-2"
+                                    />
+                                    <label htmlFor="quarterly" className="mr-4">Quarterly</label>
+                                    <input
+                                        type="radio"
+                                        id="semi-annual"
+                                        name="serviceFrequency"
+                                        value="semi-annual"
+                                        checked={formData.serviceFrequency === 'semi-annual'}
+                                        onChange={handleRadioChange}
+                                        className="mr-2"
+                                    />
+                                    <label htmlFor="semi-annual">Semi-Annual</label>
+                                </div>
+                            </div>
+                            <button
+                                onClick={calculateQuote}
+                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 w-full"
+                            >
+                                Generate Quote
+                            </button>
+                        </div>
+                        {quote && (
+                            <div className="mt-8 p-4 border rounded">
+                                <h2 className="text-xl font-semibold mb-2">Your Quote</h2>
+                                <p><strong>Total Positions:</strong> {formData.totalPositions}</p>
+                                <p><strong>Service Frequency:</strong> {quote.serviceFrequency}</p>
+                                <h3 className="text-lg font-medium mt-4">Cost Breakdown</h3>
+                                {quote.breakdown.map(item => (
+                                    <p key={item.name} className="mb-1">
+                                        {item.name}: ${item.total.toFixed(2)}
+                                    </p>
+                                ))}
+                                <p className="mt-2 font-bold">
+                                    Total: ${quote.totalCost.toFixed(2)}
+                                </p>
+                                <button
+                                    onClick={generatePDF}
+                                    className="mt-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 w-full"
+                                >
+                                    Export as PDF
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
